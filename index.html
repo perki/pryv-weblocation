@@ -1,0 +1,198 @@
+<html>
+<head>
+</head>
+<body>
+<script type="text/javascript" src="https://dlw0lofo79is5.cloudfront.net/lib-javascript/latest/pryv.js"></script>
+
+<h1>Pryv value from</h1>
+
+<p>This example lets the user sign in, then enter notes and location.</p>
+
+<p>
+    <span id="pryv-button"></span> <strong>⇠ sign in here</strong><br>
+</p>
+
+<h5>Notes</h5>
+<input type='text' id='create-note' placeholder='Content' value=''/>
+<button onClick='createNoteEvent()'>Save Note</button>
+    
+<h5>Location</h5>
+<button onClick='getLocation()'>Save Location</button>
+
+<h3>Events</h3>
+<textarea id='events'></textarea>
+    
+<div class="clearfix"></div>    
+<h3>Console</h3>
+<textarea id='console'></textarea>
+
+<style>
+body {
+    font-family: 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+h3 {
+    margin: 1.5em 0 0;
+}
+h5 {
+    margin: 1em 0 0;
+}
+textarea {
+    width: 100%;
+    height: 20em;
+}
+</style>
+
+<script>
+// UI
+
+var $console = document.getElementById('console'),
+    $events = document.getElementById('events'),
+    $noteContent = document.getElementById('create-note');
+
+// Authenticate user
+
+var x = document.getElementById("demo");
+
+
+
+// force usage of staging servers
+// comment or remove for use on staging or 
+// custom infrastructure
+//
+var domain = 'pryv.me';
+pryv.Auth.config.registerURL = {
+    host: 'reg.' + domain,
+        'ssl': true
+}; 
+
+
+var connection = null;
+
+var authSettings = {
+    requestingAppId: 'test-web-geolocation',
+    requestedPermissions: [
+        {
+            streamId: 'web-location',
+            defaultName: 'Position',
+            level: 'manage'
+        }
+    ],
+    // set this if you don't want a popup
+    returnURL: false,
+    // use the built-in auth button (optional)
+    spanButtonID: 'pryv-button',
+    callbacks: {
+        // optional (example use case: display "loading" notice)
+        initialization: function () { 
+            logToConsole('# Auth initialized');
+        },
+        // optional; triggered if the user isn't signed-in yet
+        needSignin: function(popupUrl, pollUrl, pollRateMs) {
+            logToConsole('# Auth need sign-in:\n'+
+                    '  popupUrl: ' + popupUrl + '\n'+
+                    '  pollUrl: ' + pollUrl + '\n'+
+                    '  pollRateMs: ' + pollRateMs);
+        },
+        needValidation: null,
+        // see onSignedIn() below
+        // alternative: use `accepted` callback then manually connect with returned username / token
+        signedIn: onSignedIn,
+        refused: function (reason) {
+            logToConsole('# Auth refused: ' + reason);
+        },
+        error: function (code, message) {
+            logToConsole('# Auth error: ' + code + ' ' + message);
+        }
+    }
+};
+
+pryv.Auth.setup(authSettings);
+
+
+/**
+ * @param {Pryv.Connection} connection
+ * @param {string} langCode
+ */
+function onSignedIn(conn, langCode) {
+    conn.settings.domain = domain;
+    connection = conn;
+    logToConsole('# Auth succeeded for user ' + connection.username +
+                 '  token:' + connection.auth + '\n' +
+                 '  language:' + langCode);
+    getLastEvents();
+    
+}
+
+// Handle local user actions
+
+function createNoteEvent() {
+    if (! connection) { return alert('Please sign in first.'); }
+    logToConsole('Creating event...');
+    var eventData = {
+        streamId: 'web-location',
+        type: 'note/txt',
+        content: $noteContent.value
+    };
+    connection.events.create(eventData, function (err, event) {
+        if (err) { return logToConsole('...error: ' + JSON.stringify(err)); }
+        logToConsole('...event created: ' + event.id);
+        getLastEvents();
+    });
+}
+
+
+
+// UTILS
+// Retrieve last events
+function getLastEvents() {
+    var filter = new pryv.Filter({limit : 20});
+    connection.events.get(filter, function (err, events) {
+        // convert pryv.Event objects to plain data for display
+        display(events.map(function (e) { return e.getData(); }), $events);
+    });
+}
+
+function logToConsole(text) {
+   $console.value += text + '\n';
+   $console.scrollTop = $console.scrollHeight;
+}
+
+function display(obj, $textArea) {
+    $textArea.value = JSON.stringify(obj, null, 2);
+}
+
+
+//----- geoloc ---/
+
+function getLocation() {
+  if (! connection) { return alert('Please sign in first.'); }
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(showPosition);
+  } else {
+    logToConsole("Geolocation is not supported by this browser.");
+  }
+}
+
+function showPosition(position) {
+  
+    logToConsole('Creating event...' + JSON.stringify(position));
+    var eventData = {
+        streamId: 'web-location',
+        type: 'position/wgs84',
+        content: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude     
+        }
+    };
+    connection.events.create(eventData, function (err, event) {
+        if (err) { return logToConsole('...error: ' + JSON.stringify(err)); }
+        logToConsole('...event created: ' + event.id);
+        getLastEvents();
+    });
+    
+}
+
+</script>
+
+</body>
+</html>
